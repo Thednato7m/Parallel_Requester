@@ -1,35 +1,11 @@
 import requests
 import time
+import argparse
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from http.cookies import SimpleCookie
-# --- Step 1: Define Full Cookie String ---
-cookie_header = '''Apache=; _yjsu_yjad=; dd_anonymous_id=; ss_cip=; _fbp=; ELOQUA=; _ga_2NPKD7C4PN=; _ga; _gcl_au=; _ga_7NMP2MSYPM=; _rdt_uuid=; _uetvid=; _hjSessionUser_128718=; mf_user=|; _clck=; ambassador_session.auth0-portal-portal-host-oauth2-filter.ambassador=; ambassador_xsrf.auth0-portal-portal-host-oauth2-filter.ambassador='''
 
-# --- Step 2: Parse Ambassador Tokens ---
-cookie = SimpleCookie()
-cookie.load(cookie_header)
-ambassador_xsrf = cookie.get("ambassador_xsrf.auth0-portal-portal-host-oauth2-filter.ambassador").value
-
-# --- Step 3: Define Request Details ---
-url = ""
-
-headers = {
-    "Content-Type": "application/json",
-    "Accept": "application/json",
-    "Origin": "origin",
-    "Referer": "Referer",
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
-    "X-XSRF-TOKEN": ambassador_xsrf,
-    "Cookie": cookie_header
-}
-
-# --- Step 4: Function to Send a Single Request ---
-def send_request(i):
-    payload = {
-       "user_id": "",
-  "user_name": "Sample_ukser",
-  "role_type": "user"
-    }
+# --- Step 1: Function to Send a Single Request ---
+def send_request(i, url, headers, payload):
+    """Sends a single POST request and returns the result."""
     start_time = time.time()
     try:
         response = requests.post(url, json=payload, headers=headers)
@@ -52,18 +28,45 @@ def send_request(i):
             "time": elapsed
         }
 
-# --- Step 5: Run 100 Requests in Parallel ---
-def run_parallel_requests():
+# --- Step 2: Run Requests in Parallel ---
+def run_parallel_requests(url, num_requests, payload, headers):
+    """Executes requests in parallel using a thread pool."""
     results = []
-    with ThreadPoolExecutor(max_workers=100) as executor:
-        futures = [executor.submit(send_request, i) for i in range(1, 101)]
+    with ThreadPoolExecutor(max_workers=num_requests) as executor:
+        futures = [executor.submit(send_request, i, url, headers, payload) for i in range(1, num_requests + 1)]
         for future in as_completed(futures):
             results.append(future.result())
     return results
 
-# --- Step 6: Execute and Print Summary ---
+# --- Step 3: Execute and Print Summary ---
 if __name__ == "__main__":
-    responses = run_parallel_requests()
+    parser = argparse.ArgumentParser(description="Parallel HTTP requester for load testing.")
+    parser.add_argument("--url", required=True, help="The target URL for the POST request.")
+    parser.add_argument("--requests", type=int, default=100, help="The number of parallel requests to send.")
+    parser.add_argument("--cookies", required=True, help="The full string of cookies to include in the request header.")
+    parser.add_argument("--xsrf_token", required=True, help="The X-XSRF-TOKEN to include in the request header.")
+    args = parser.parse_args()
+
+    # Define Request Details from arguments and hardcoded values
+    headers = {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "Origin": "",
+        "Referer": "",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+        "X-XSRF-TOKEN": args.xsrf_token,
+        "Cookie": args.cookies
+    }
+    
+    payload = {
+        "user_id": "",
+        "user_name": "Sample_ukser",
+        "role_type": "user"
+    }
+
+    print(f"Sending {args.requests} parallel requests to {args.url}...")
+    responses = run_parallel_requests(args.url, args.requests, payload, headers)
+    
     success_count = sum(1 for r in responses if r["status"] == "✅")
     error_count = len(responses) - success_count
     times = [r["time"] for r in responses]
