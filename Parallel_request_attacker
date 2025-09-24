@@ -1,0 +1,82 @@
+import requests
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from http.cookies import SimpleCookie
+# --- Step 1: Define Full Cookie String ---
+cookie_header = '''Apache=50b2e9ed.63c125efdd7af; _yjsu_yjad=1754899465.8bc0cce5-b508-490f-be1c-f3aeb051b239; dd_anonymous_id=5e4d0a05-9fd5-4627-b2e2-4b72e5e0f52f; ss_cip=167.103.118.203; _fbp=fb.1.1754899470882.512612798417562310; ELOQUA=GUID=00BEB18E49F34261A9256B8897A1A84D; _ga_2NPKD7C4PN=GS2.1.s1754899595$o1$g0$t1754899595$j60$l0$h0; _ga=GA1.1.1629639201.1754899597; _gcl_au=1.1.134859625.1754899597; _ga_7NMP2MSYPM=GS2.1.s1754899595$o1$g0$t1754899595$j60$l0$h0; _rdt_uuid=1754899466049.9a343ec3-142c-438b-97df-e741e2314448; _uetvid=cd4bfb20768911f0babaa35f6e2709ed; _hjSessionUser_128718=eyJpZCI6ImFlMmIxZjRlLTVmMDktNWEyZi1hZmY4LWEyOWRhNzhjZjMxZSIsImNyZWF0ZWQiOjE3NTQ4OTk0NzAxOTUsImV4aXN0aW5nIjp0cnVlfQ==; mf_user=7fc3db79a2e12a6a66f113e5278819a6|; _clck=1qblcfl%7C2%7Cfyd%7C0%7C2049; ambassador_session.auth0-portal-portal-host-oauth2-filter.ambassador=dc2973d352cd9aeba3ff1f4922e4d76d2b1b8f39ffb4c5196b395ce6de401ed0; ambassador_xsrf.auth0-portal-portal-host-oauth2-filter.ambassador=08a78bc9cffda2febc077e3c164e2366e5d6ededdf227b5c2bcd91b70cdc0af1'''
+
+# --- Step 2: Parse Ambassador Tokens ---
+cookie = SimpleCookie()
+cookie.load(cookie_header)
+ambassador_xsrf = cookie.get("ambassador_xsrf.auth0-portal-portal-host-oauth2-filter.ambassador").value
+
+# --- Step 3: Define Request Details ---
+url = ""
+
+headers = {
+    "Content-Type": "application/json",
+    "Accept": "application/json",
+    "Origin": "origin",
+    "Referer": "Referer",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+    "X-XSRF-TOKEN": ambassador_xsrf,
+    "Cookie": cookie_header
+}
+
+# --- Step 4: Function to Send a Single Request ---
+def send_request(i):
+    payload = {
+       "user_id": "",
+  "user_name": "Sample_ukser",
+  "role_type": "user"
+    }
+    start_time = time.time()
+    try:
+        response = requests.post(url, json=payload, headers=headers)
+        elapsed = time.time() - start_time
+        status = "✅" if response.status_code < 400 else "❌"
+        return {
+            "id": i,
+            "status": status,
+            "code": response.status_code,
+            "text": response.text[:100],
+            "time": elapsed
+        }
+    except Exception as e:
+        elapsed = time.time() - start_time
+        return {
+            "id": i,
+            "status": "❌",
+            "code": "Exception",
+            "text": str(e),
+            "time": elapsed
+        }
+
+# --- Step 5: Run 100 Requests in Parallel ---
+def run_parallel_requests():
+    results = []
+    with ThreadPoolExecutor(max_workers=100) as executor:
+        futures = [executor.submit(send_request, i) for i in range(1, 101)]
+        for future in as_completed(futures):
+            results.append(future.result())
+    return results
+
+# --- Step 6: Execute and Print Summary ---
+if __name__ == "__main__":
+    responses = run_parallel_requests()
+    success_count = sum(1 for r in responses if r["status"] == "✅")
+    error_count = len(responses) - success_count
+    times = [r["time"] for r in responses]
+    avg_time = sum(times) / len(times)
+    min_time = min(times)
+    max_time = max(times)
+
+    print("\n--- Summary ---")
+    print(f"✅ Success: {success_count}")
+    print(f"❌ Errors: {error_count}")
+    print(f"⏱️ Avg Response Time: {avg_time:.2f} sec")
+    print(f"🚀 Fastest: {min_time:.2f} sec")
+    print(f"🐢 Slowest: {max_time:.2f} sec\n")
+
+    for r in responses:
+        print(f"{r['status']} Request {r['id']}: {r['code']} - {r['text']} ({r['time']:.2f} sec)")
