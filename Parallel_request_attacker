@@ -3,7 +3,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from http.cookies import SimpleCookie
 # --- Step 1: Define Full Cookie String ---
-cookie_header = '''Apache=50b2e9ed.63c125efdd7af; _yjsu_yjad=1754899465.8bc0cce5-b508-490f-be1c-f3aeb051b239; dd_anonymous_id=5e4d0a05-9fd5-4627-b2e2-4b72e5e0f52f; ss_cip=167.103.118.203; _fbp=fb.1.1754899470882.512612798417562310; ELOQUA=GUID=00BEB18E49F34261A9256B8897A1A84D; _ga_2NPKD7C4PN=GS2.1.s1754899595$o1$g0$t1754899595$j60$l0$h0; _ga=GA1.1.1629639201.1754899597; _gcl_au=1.1.134859625.1754899597; _ga_7NMP2MSYPM=GS2.1.s1754899595$o1$g0$t1754899595$j60$l0$h0; _rdt_uuid=1754899466049.9a343ec3-142c-438b-97df-e741e2314448; _uetvid=cd4bfb20768911f0babaa35f6e2709ed; _hjSessionUser_128718=eyJpZCI6ImFlMmIxZjRlLTVmMDktNWEyZi1hZmY4LWEyOWRhNzhjZjMxZSIsImNyZWF0ZWQiOjE3NTQ4OTk0NzAxOTUsImV4aXN0aW5nIjp0cnVlfQ==; mf_user=7fc3db79a2e12a6a66f113e5278819a6|; _clck=1qblcfl%7C2%7Cfyd%7C0%7C2049; ambassador_session.auth0-portal-portal-host-oauth2-filter.ambassador=dc2973d352cd9aeba3ff1f4922e4d76d2b1b8f39ffb4c5196b395ce6de401ed0; ambassador_xsrf.auth0-portal-portal-host-oauth2-filter.ambassador=08a78bc9cffda2febc077e3c164e2366e5d6ededdf227b5c2bcd91b70cdc0af1'''
+cookie_header = '''Apache=; _yjsu_yjad=; dd_anonymous_id=; ss_cip=; _fbp=; ELOQUA=; _ga_2NPKD7C4PN=; _ga; _gcl_au=; _ga_7NMP2MSYPM=; _rdt_uuid=; _uetvid=; _hjSessionUser_128718=; mf_user=|; _clck=; ambassador_session.auth0-portal-portal-host-oauth2-filter.ambassador=; ambassador_xsrf.auth0-portal-portal-host-oauth2-filter.ambassador='''
 
 # --- Step 2: Parse Ambassador Tokens ---
 cookie = SimpleCookie()
