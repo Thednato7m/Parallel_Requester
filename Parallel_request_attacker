@@ -1,44 +1,64 @@
-import requests
-import time
-import argparse
-from concurrent.futures import ThreadPoolExecutor, as_completed
+#!/usr/bin/env python3
+import asyncio, aiohttp, ssl, time, argparse
+from aiohttp import TCPConnector
 
-# --- Step 1: Function to Send a Single Request ---
-def send_request(i, url, headers, payload):
-    """Sends a single POST request and returns the result."""
-    start_time = time.time()
-    try:
-        response = requests.post(url, json=payload, headers=headers)
-        elapsed = time.time() - start_time
-        status = "✅" if response.status_code < 400 else "❌"
-        return {
-            "id": i,
-            "status": status,
-            "code": response.status_code,
-            "text": response.text[:100],
-            "time": elapsed
-        }
-    except Exception as e:
-        elapsed = time.time() - start_time
-        return {
-            "id": i,
-            "status": "❌",
-            "code": "Exception",
-            "text": str(e),
-            "time": elapsed
-        }
+# ----------  config  ----------
+MAX_CONCURRENT   = 2048          # cap simultaneous sockets
+POOL_LIMIT       = 0             # 0 = no global limit (semaphore is the real gate)
+KEEPALIVE        = 30
+SSL_CONTEXT      = ssl.create_default_context()
+SSL_CONTEXT.check_hostname = False
+SSL_CONTEXT.verify_mode    = ssl.CERT_NONE
+# --------------------------------
 
-# --- Step 2: Run Requests in Parallel ---
-def run_parallel_requests(url, num_requests, payload, headers):
-    """Executes requests in parallel using a thread pool."""
-    results = []
-    with ThreadPoolExecutor(max_workers=num_requests) as executor:
-        futures = [executor.submit(send_request, i, url, headers, payload) for i in range(1, num_requests + 1)]
-        for future in as_completed(futures):
-            results.append(future.result())
-    return results
+async def bounded_fetch(session, url, payload, headers, sem, req_id):
+    """Single async POST guarded by semaphore + connection-pool."""
+    async with sem:
+        start = time.time()
+        try:
+            async with session.post(url, json=payload, headers=headers,
+                                    timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                text = await resp.text()
+                elapsed = time.time() - start
+                return {
+                    "id": req_id,
+                    "status": "✅" if resp.status < 400 else "❌",
+                    "code": resp.status,
+                    "text": text[:100],
+                    "time": elapsed
+                }
+        except Exception as e:
+            elapsed = time.time() - start
+            return {
+                "id": req_id,
+                "status": "❌",
+                "code": "Exception",
+                "text": str(e),
+                "time": elapsed
+            }
 
-# --- Step 3: Execute and Print Summary ---
+async def run_async_requests(url, num_requests, payload, headers):
+    """Fire N requests asynchronously, honouring MAX_CONCURRENT."""
+    semaphore = asyncio.Semaphore(MAX_CONCURRENT)
+    conn = TCPConnector(
+        limit=POOL_LIMIT,
+        limit_per_host=0,
+        keepalive_timeout=KEEPALIVE,
+        ssl=SSL_CONTEXT,
+        enable_cleanup_closed=True
+    )
+
+    async with aiohttp.ClientSession(connector=conn) as session:
+        tasks = [
+            asyncio.create_task(
+                bounded_fetch(session, url, payload, headers, semaphore, i)
+            )
+            for i in range(1, num_requests + 1)
+        ]
+        # gather keeps order; you can use as_completed if you prefer
+        return await asyncio.gather(*tasks)
+
+# ----------  CLI remains identical  ----------
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Parallel HTTP requester for load testing.")
     parser.add_argument("--url", required=True, help="The target URL for the POST request.")
@@ -47,7 +67,6 @@ if __name__ == "__main__":
     parser.add_argument("--xsrf_token", required=True, help="The X-XSRF-TOKEN to include in the request header.")
     args = parser.parse_args()
 
-    # Define Request Details from arguments and hardcoded values
     headers = {
         "Content-Type": "application/json",
         "Accept": "application/json",
@@ -57,7 +76,7 @@ if __name__ == "__main__":
         "X-XSRF-TOKEN": args.xsrf_token,
         "Cookie": args.cookies
     }
-    
+
     payload = {
         "user_id": "",
         "user_name": "Sample_ukser",
@@ -65,19 +84,18 @@ if __name__ == "__main__":
     }
 
     print(f"Sending {args.requests} parallel requests to {args.url}...")
-    responses = run_parallel_requests(args.url, args.requests, payload, headers)
-    
+    responses = asyncio.run(run_async_requests(args.url, args.requests, payload, headers))
+
     success_count = sum(1 for r in responses if r["status"] == "✅")
-    error_count = len(responses) - success_count
-    times = [r["time"] for r in responses]
-    avg_time = sum(times) / len(times)
-    min_time = min(times)
-    max_time = max(times)
+    error_count   = len(responses) - success_count
+    times         = [r["time"] for r in responses]
+    avg_time      = sum(times) / len(times)
+    min_time, max_time = min(times), max(times)
 
     print("\n--- Summary ---")
     print(f"✅ Success: {success_count}")
     print(f"❌ Errors: {error_count}")
-    print(f"⏱️ Avg Response Time: {avg_time:.2f} sec")
+    print(f"⏱️  Avg Response Time: {avg_time:.2f} sec")
     print(f"🚀 Fastest: {min_time:.2f} sec")
     print(f"🐢 Slowest: {max_time:.2f} sec\n")
 
